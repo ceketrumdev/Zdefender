@@ -1,0 +1,31 @@
+[package]
+name = "zdefender"
+version = "0.1.0"
+edition = "2021"
+authors = ["ZDefender Team"]
+description = "Un système de protection contre les attaques DDoS"
+
+[features]
+default = []
+systemd = ["systemd-journal-logger"]
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+pcap = "2.2.0"
+pnet = "0.35.0"
+clap = { version = "4.3", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11.8"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dashmap = "6.1.0"
+rand = "0.9.1"
+crossbeam-channel = "0.5"
+futures = "0.3"
+# Dépendance conditionnelle pour systemd-journal-logger
+systemd-journal-logger = { version = "2.0.0", optional = true }
+
+# Cette section est maintenant gérée par les features plutôt que par la plateforme
+# [target.'cfg(unix)'.dependencies]
+# systemd-journal-logger = "1.0.0"

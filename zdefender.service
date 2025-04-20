@@ -1,0 +1,14 @@
+[Unit]
+Description=ZDefender - Protection contre les attaques DDoS
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/zdefender start --active
+ExecStop=/usr/local/bin/zdefender stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 

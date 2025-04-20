@@ -1,0 +1,5 @@
+[target.'cfg(unix)'.dependencies]
+systemd-journal-logger = "1.0.0"
+
+[target.'cfg(unix)']
+rustflags = ["--cfg", "feature=\"systemd\""] 
