@@ -7,7 +7,7 @@
 **ZDefender** est un système avancé de protection contre les attaques DDoS pour les applications Linux. Il fournit une solution complète pour détecter et atténuer les menaces réseau en temps réel.
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/raw/main/docs/zdefender-logo.png" alt="ZDefender Logo" width="1024" height="343" />
+  <img src="https://github.com/ceketrumdev/Zdefender/blob/master/Zdefenderlogo.png" alt="ZDefender Logo" width="1024" height="343" />
 </p>
 
 ## 📋 Table des matières
