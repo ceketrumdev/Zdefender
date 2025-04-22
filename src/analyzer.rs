@@ -1,17 +1,14 @@
 #![allow(dead_code)]
-use crate::models::{
-    Action, GlobalStats, IpStats, IpStatsMap, PacketInfo, Report, ReportType, DDoSDetectionStats,
-    IpRate, IpState, PacketType, SyscallPacket, SecurityStats
-};
 use crate::config::Config;
-use log::{debug, error, info, warn};
+use crate::models::{
+    GlobalStats, IpStats, IpStatsMap, PacketInfo, Report
+};
+use async_trait::async_trait;
+use dashmap::DashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use tokio::sync::{mpsc, RwLock, Semaphore};
-use dashmap::DashMap;
-use tokio::task::JoinSet;
-use async_trait::async_trait;
 
 /// Trait définissant l'interface publique de l'analyseur
 /// (Copie du trait AnalyzerInterface pour éviter l'importation circulaire)
