@@ -275,7 +275,7 @@ async fn main() {
     protection.set_region_trust("FR", 0.8).await;
 
     // Traiter un paquet
-    if let Some(action) = protection.process_packet(packet) {
+    if let Some(action) = protection.process_packet(_packet) {
         match action {
             Action::Drop => println!("Paquet supprimé"),
             Action::Block(ip, duration) => println!("IP {} bloquée pour {:?}", ip, duration),

@@ -549,10 +549,10 @@ fn simulate_packet() -> Option<PacketInfo> {
     use rand::Rng;
     use std::net::{Ipv4Addr, IpAddr};
     
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     
     // Simuler différents types de paquets avec différentes probabilités
-    let packet_type = match rng.gen_range(0..100) {
+    let packet_type = match rng.random_range(0..100) {
         0..=70 => PacketType::Tcp,
         71..=85 => PacketType::Udp,
         _ => PacketType::Icmp,
@@ -560,20 +560,20 @@ fn simulate_packet() -> Option<PacketInfo> {
     
     // Générer une IP source aléatoire
     let source_ip = IpAddr::V4(Ipv4Addr::new(
-        rng.gen_range(1..255),
-        rng.gen_range(0..255),
-        rng.gen_range(0..255),
-        rng.gen_range(1..255),
+        rng.random_range(1..255),
+        rng.random_range(0..255),
+        rng.random_range(0..255),
+        rng.random_range(1..255),
     ));
     
     // Générer des ports aléatoires
     let source_port = match packet_type {
-        PacketType::Tcp | PacketType::Udp => Some(rng.gen_range(1024..65535)),
+        PacketType::Tcp | PacketType::Udp => Some(rng.random_range(1024..65535)),
         _ => None
     };
     
     let dest_port = match packet_type {
-        PacketType::Tcp | PacketType::Udp => Some(rng.gen_range(1..65535)),
+        PacketType::Tcp | PacketType::Udp => Some(rng.random_range(1..65535)),
         _ => None
     };
     
@@ -585,13 +585,13 @@ fn simulate_packet() -> Option<PacketInfo> {
         source_port,
         dest_port,
         protocol: packet_type,
-        size: rng.gen_range(40..1500),
+        size: rng.random_range(40..1500),
         flags: if packet_type == PacketType::Tcp {
             Some(vec!["ACK".to_string(), "SYN".to_string()])
         } else {
             None
         },
-        ttl: Some(rng.gen_range(32..128)),
+        ttl: Some(rng.random_range(32..128)),
     })
 }
 
@@ -660,8 +660,8 @@ async fn run_benchmark(packets: u64, normal_ratio: f64, output: Option<String>) 
     // Charger la configuration
     let config = Config::load().unwrap_or_else(|_| Config::default());
     let config = Arc::new(RwLock::new(config));
-    
-    let start = Instant::now();
+
+    Instant::now();
     
     // Créer et exécuter le benchmark
     let mut benchmark = zdefender::ZDefenderBenchmark::new(

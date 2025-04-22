@@ -10,7 +10,6 @@ pub use network_capture::*;
 pub use crate::analyzer::AnalyzerInterface;
 
 use crate::analyzer::Analyzer;
-use async_trait::async_trait;
 use crate::config::{Config, ServiceState};
 use crate::defender::Defender;
 use crate::logger::Logger;
@@ -138,7 +137,7 @@ impl ZdefenderService {
                 let mut packet_rx = packet_broadcast_tx.subscribe();
                 
                 let task = tokio::spawn(async move {
-                    while let Ok(packet) = packet_rx.recv().await {
+                    while let Ok(_packet) = packet_rx.recv().await {
                         analyzer_clone.analyze_packet().await;
                     }
                 });
@@ -149,7 +148,7 @@ impl ZdefenderService {
             // Mode single-thread: utiliser un seul worker
             let analyzer_clone = analyzer.clone();
             let task = tokio::spawn(async move {
-                while let Some(packet) = packet_rx.recv().await {
+                while let Some(_packet) = packet_rx.recv().await {
                     analyzer_clone.analyze_packet().await;
                 }
             });
@@ -237,7 +236,7 @@ impl ZdefenderService {
                     interval = std::cmp::max(
                         interval,
                         Duration::from_secs(
-                            (config_clone.read().await.check_interval).saturating_add(1)
+                            config_clone.read().await.check_interval.saturating_add(1)
                         )
                     );
                 }

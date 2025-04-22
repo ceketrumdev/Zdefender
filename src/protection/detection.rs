@@ -112,8 +112,8 @@ impl ProtectionManager {
         let config = futures::executor::block_on(async { self.config.read().await.clone() });
         if !config.whitelist.iter().any(|ip| ip == &packet.source_ip.to_string()) {
             // Pour les IPs non en liste blanche, appliquer un échantillonnage du trafic
-            let mut rng = rand::thread_rng();
-            let sample = rng.gen_bool(self.rate_limit_factor);
+            let mut rng = rand::rng();
+            let sample = rng.random_bool(self.rate_limit_factor);
             
             if !sample {
                 // Rejeter aléatoirement une partie du trafic en fonction du facteur de limitation

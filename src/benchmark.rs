@@ -1,13 +1,11 @@
 use crate::analyzer;
 use crate::config::Config;
-use crate::models::{Action, IpStats, IpStatsMap, PacketInfo, PacketType, Report, ReportType};
+use crate::models::{Action, PacketInfo, PacketType, Report};
 use crate::defender::Defender;
 use crate::protection::ProtectionManager;
 use crate::logger::Logger;
-use async_trait::async_trait;
 
-use log::{info, warn, debug, error};
-use std::collections::HashMap;
+use log::{info, debug};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -15,7 +13,7 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::time;
 use std::fs::File;
 use std::io::Write;
-use rand::{Rng, rngs::ThreadRng, thread_rng};
+use rand::{Rng, rngs::ThreadRng};
 use num_format::{Locale, ToFormattedString};
 
 /// Structure principale de benchmark pour le système ZDefender
@@ -95,7 +93,7 @@ impl ZDefenderBenchmark {
         let protection_manager = Arc::new(RwLock::new(protection_manager));
         
         // Générer les IPs
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let normal_ips = (0..100).map(|_| generate_random_ip(&mut rng)).collect();
         let attack_ips = (0..20).map(|_| generate_random_ip(&mut rng)).collect();
         
@@ -176,7 +174,7 @@ impl ZDefenderBenchmark {
                 debug!("Génération de trafic mixte: {}%", (i * 100) / count);
             }
             
-            let packet = if self.rng.gen_bool(self.normal_traffic_ratio) {
+            let packet = if self.rng.random_bool(self.normal_traffic_ratio) {
                 self.generate_normal_packet()
             } else {
                 self.generate_attack_packet()
@@ -226,18 +224,18 @@ impl ZDefenderBenchmark {
         let dest_ip = *self.normal_ips.choose(&mut self.rng).unwrap_or(&IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         
         // Générer des ports aléatoires mais réalistes
-        let source_port = Some(self.rng.gen_range(1024..=65535));
-        let dest_port = Some(self.rng.gen_range(80..=8080));
+        let source_port = Some(self.rng.random_range(1024..=65535));
+        let dest_port = Some(self.rng.random_range(80..=8080));
         
         // Varier les protocoles
-        let protocol = match self.rng.gen_range(0..=9) {
+        let protocol = match self.rng.random_range(0..=9) {
             0..=6 => PacketType::Tcp,   // 70% TCP
             7..=8 => PacketType::Udp,   // 20% UDP
             _ => PacketType::Icmp,     // 10% ICMP
         };
         
         // Taille de paquet variable mais réaliste
-        let size = self.rng.gen_range(64..=1500);
+        let size = self.rng.random_range(64..=1500);
         
         PacketInfo {
             timestamp: SystemTime::now(),
@@ -258,23 +256,23 @@ impl ZDefenderBenchmark {
         let source_ip = *self.attack_ips.choose(&mut self.rng).unwrap_or(&IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
         
         // L'attaque cible souvent un port spécifique
-        let dest_port = Some(self.rng.gen_range(1..=1024)); // Ports bien connus
+        let dest_port = Some(self.rng.random_range(1..=1024)); // Ports bien connus
         
         // Les attaques sont souvent sur un protocole spécifique
-        let protocol = match self.rng.gen_range(0..=9) {
+        let protocol = match self.rng.random_range(0..=9) {
             0..=4 => PacketType::Tcp,   // 50% TCP SYN flood
             5..=8 => PacketType::Udp,   // 40% UDP flood
             _ => PacketType::Icmp,     // 10% ICMP flood
         };
         
         // Taille de paquet variable
-        let size = self.rng.gen_range(40..=2000);
+        let size = self.rng.random_range(40..=2000);
         
         PacketInfo {
             timestamp: SystemTime::now(),
             source_ip,
             dest_ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)), // Cible fixe
-            source_port: Some(self.rng.gen_range(1024..=65535)),
+            source_port: Some(self.rng.random_range(1024..=65535)),
             dest_port,
             protocol,
             size,
@@ -460,17 +458,17 @@ impl ZDefenderBenchmark {
 /// Génère une adresse IP aléatoire
 fn generate_random_ip(rng: &mut ThreadRng) -> IpAddr {
     // 80% IPv4, 20% IPv6
-    if rng.gen_bool(0.8) {
-        let a = rng.gen_range(1..=254);
-        let b = rng.gen_range(0..=255);
-        let c = rng.gen_range(0..=255);
-        let d = rng.gen_range(1..=254);
+    if rng.random_bool(0.8) {
+        let a = rng.random_range(1..=254);
+        let b = rng.random_range(0..=255);
+        let c = rng.random_range(0..=255);
+        let d = rng.random_range(1..=254);
         IpAddr::V4(Ipv4Addr::new(a, b, c, d))
     } else {
         // Génération simple d'IPv6
         let segments: [u16; 8] = [
-            rng.gen(), rng.gen(), rng.gen(), rng.gen(),
-            rng.gen(), rng.gen(), rng.gen(), rng.gen(),
+            rng.random(), rng.random(), rng.random(), rng.random(),
+            rng.random(), rng.random(), rng.random(), rng.random(),
         ];
         IpAddr::V6(segments.into())
     }
@@ -486,7 +484,7 @@ impl<T> ChooseRandom<T> for Vec<T> {
         if self.is_empty() {
             None
         } else {
-            Some(&self[rng.gen_range(0..self.len())])
+            Some(&self[rng.random_range(0..self.len())])
         }
     }
 } 
