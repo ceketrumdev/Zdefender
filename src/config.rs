@@ -55,7 +55,10 @@ pub struct Config {
     
     /// Nouveaux paramètres pour le score de confiance
     pub trust_threshold: f64,
+    
+    /// Scores de confiance par région (code pays -> score)
     pub region_trust_scores: HashMap<String, f64>,
+    
     pub auto_block_threshold: f64,
     pub auto_whitelist_threshold: f64,
     pub connection_time_for_trust: u64,
@@ -82,9 +85,6 @@ pub struct Config {
     pub update_check_interval: u64,        // Intervalle en heures pour vérifier les mises à jour
     pub update_channel: UpdateChannel,     // Canal de mise à jour (stable, beta, dev)
     pub last_update_check: Option<String>, // Date de la dernière vérification de mise à jour
-    
-    /// Mapping des scores de confiance par région
-    pub region_trust_scores: HashMap<String, f32>,
     
     /// Configuration des mises à jour automatiques
     pub update_config: UpdateConfig,
@@ -178,9 +178,6 @@ impl Default for Config {
             update_check_interval: 24, // Vérifier les mises à jour une fois par jour
             update_channel: UpdateChannel::Stable,
             last_update_check: None,
-            
-            // Mapping des scores de confiance par région
-            region_trust_scores: HashMap::new(),
             
             // Configuration des mises à jour automatiques
             update_config: UpdateConfig::default(),
