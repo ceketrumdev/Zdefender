@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::time::Duration;
 use log::{debug, info, warn};
 use crate::models::{Action, PacketInfo, IpStats, PacketType};

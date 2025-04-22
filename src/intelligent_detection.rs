@@ -1,6 +1,7 @@
-use crate::models::{PacketInfo, IpStats, IpStatsMap, Report, ReportType, Action};
+#![allow(dead_code)]
+use crate::models::{PacketInfo, IpStatsMap, Report, ReportType, Action};
 use crate::config::Config;
-use log::{debug, info, warn, error};
+use log::{info, error};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -8,26 +9,26 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::{mpsc, RwLock};
 use dashmap::DashMap;
 use std::collections::VecDeque;
-use tokio::time;
 
 /// Nombre de paquets à conserver pour l'analyse comportementale
 const BEHAVIOR_WINDOW_SIZE: usize = 100;
 
-/// Structure pour l'analyse comportementale du trafic
+/// Profil comportemental pour l'analyse de trafic réseau
+/// Permet de détecter les anomalies dans le comportement d'une IP
 pub struct BehaviorProfile {
-    /// Historique des taux de paquets par seconde
+    /// Historique des taux de paquets par seconde (20 dernières mesures)
     packet_rates: VecDeque<f64>,
-    /// Moyenne des taux de paquets
+    /// Moyenne mobile des taux de paquets
     mean_rate: f64,
-    /// Écart-type des taux de paquets
+    /// Écart-type des taux de paquets pour la détection d'anomalies
     std_deviation: f64,
-    /// Nombre de connexions TCP par intervalle
+    /// Historique des nouvelles connexions TCP par intervalle
     tcp_connections: VecDeque<u32>,
-    /// Répartition des protocoles (TCP, UDP, ICMP, etc.)
+    /// Distribution des protocoles utilisés par cette IP (%)
     protocol_distribution: HashMap<String, f64>,
-    /// Dernière mise à jour du profil
+    /// Horodatage de la dernière mise à jour du profil
     last_update: SystemTime,
-    /// Score d'anomalie (0-100, où 100 est très suspect)
+    /// Score d'anomalie normalisé (0-100)
     anomaly_score: f64,
 }
 
@@ -44,12 +45,12 @@ impl BehaviorProfile {
         }
     }
 
-    /// Ajoute un nouveau taux de paquets à l'historique et met à jour les statistiques
+    /// Ajoute un nouveau taux de paquets à l'historique et recalcule les statistiques
     pub fn update_packet_rate(&mut self, rate: f64) {
         // Ajouter le nouveau taux
         self.packet_rates.push_back(rate);
         
-        // Limiter la taille de l'historique
+        // Limiter la taille de l'historique aux 20 dernières mesures
         if self.packet_rates.len() > 20 {
             self.packet_rates.pop_front();
         }
@@ -57,7 +58,7 @@ impl BehaviorProfile {
         // Recalculer la moyenne
         self.mean_rate = self.packet_rates.iter().sum::<f64>() / self.packet_rates.len() as f64;
         
-        // Recalculer l'écart-type
+        // Recalculer l'écart-type pour la détection d'anomalies statistiques
         if self.packet_rates.len() > 1 {
             let variance = self.packet_rates.iter()
                 .map(|x| {
@@ -72,72 +73,77 @@ impl BehaviorProfile {
         self.last_update = SystemTime::now();
     }
     
-    /// Met à jour la distribution des protocoles
+    /// Met à jour la distribution des protocoles utilisés par cette IP
     pub fn update_protocol_distribution(&mut self, protocol: &str) {
+        // Recalculer les pourcentages pour que la somme reste à 100%
         let total = self.protocol_distribution.values().sum::<f64>() + 1.0;
         
         for (_, count) in self.protocol_distribution.iter_mut() {
             *count = *count / total;
         }
         
+        // Incrémenter le compteur pour ce protocole
         *self.protocol_distribution.entry(protocol.to_string()).or_insert(0.0) += 1.0 / total;
         
         self.last_update = SystemTime::now();
     }
     
-    /// Calcule un score d'anomalie basé sur les comportements observés
+    /// Calcule un score d'anomalie (0-100) basé sur les comportements observés
+    /// Plus le score est élevé, plus le comportement est considéré comme suspect
     pub fn calculate_anomaly_score(&mut self, current_rate: f64) -> f64 {
         let mut score = 0.0;
         
-        // Vérifier si le taux actuel est anormalement élevé
+        // Détection statistique: taux anormalement élevé (z-score)
         if self.packet_rates.len() >= 5 && self.std_deviation > 0.0 {
-            // Calculer le z-score (combien d'écarts-types par rapport à la moyenne)
+            // Calcul du z-score (nombre d'écarts-types par rapport à la moyenne)
             let z_score = (current_rate - self.mean_rate) / self.std_deviation;
             
-            // Si le taux est plus de 3 écarts-types au-dessus de la moyenne, c'est suspect
+            // Score proportionnel au dépassement du seuil de 3 écarts-types
             if z_score > 3.0 {
                 score += 40.0 * (z_score - 3.0).min(5.0) / 5.0;
             }
         }
         
-        // Vérifier les changements soudains dans la distribution des protocoles
+        // Détection par signature: analyse de la distribution des protocoles
         if let Some(tcp_ratio) = self.protocol_distribution.get("TCP") {
+            // Une concentration très élevée de TCP peut indiquer un scan ou SYN flood
             if *tcp_ratio > 0.9 {
-                // Une forte concentration de TCP peut indiquer un scan ou une attaque SYN flood
                 score += 20.0;
             }
         }
         
         if let Some(icmp_ratio) = self.protocol_distribution.get("ICMP") {
+            // Une forte concentration d'ICMP peut indiquer un ping flood
             if *icmp_ratio > 0.5 {
-                // Une forte concentration d'ICMP peut indiquer un ping flood
                 score += 30.0;
             }
         }
         
-        // Pénaliser les comportements qui ressemblent à des attaques DDoS connues
+        // Seuil absolu: taux de paquets très élevé
         if current_rate > 1000.0 {
             score += 10.0;
         }
         
+        // Normaliser le score entre 0 et 100
         self.anomaly_score = score.min(100.0);
         self.anomaly_score
     }
 }
 
-/// Gestionnaire de détection intelligente
+/// Système de détection d'intrusion intelligent basé sur l'analyse comportementale
+/// Surveille les tendances du trafic et détecte les anomalies
 pub struct IntelligentDetector {
-    /// Configuration du système
+    /// Configuration globale du système
     config: Arc<RwLock<Config>>,
-    /// Profils comportementaux par IP
+    /// Profils comportementaux par adresse IP
     behavior_profiles: Arc<DashMap<IpAddr, BehaviorProfile>>,
-    /// Canal pour envoyer des rapports
+    /// Canal pour envoyer des rapports d'alertes
     report_tx: mpsc::Sender<Report>,
-    /// Seuil d'anomalie pour déclencher une alerte
+    /// Seuil d'anomalie pour déclencher une alerte (0-100)
     anomaly_threshold: f64,
-    /// Modèle du trafic normal (baseline)
+    /// Profil de référence du trafic normal (baseline)
     baseline_profile: BehaviorProfile,
-    /// Dernière mise à jour de la baseline
+    /// Horodatage de la dernière mise à jour de la baseline
     last_baseline_update: SystemTime,
 }
 
@@ -157,6 +163,7 @@ impl IntelligentDetector {
     }
     
     /// Analyse un paquet et met à jour les profils comportementaux
+    /// Retourne le score d'anomalie normalisé (0.0-1.0) si disponible
     pub async fn analyze_packet(&self, packet: &PacketInfo, ip_stats: &IpStatsMap) -> Option<f64> {
         let ip = packet.source_ip;
         
@@ -175,7 +182,7 @@ impl IntelligentDetector {
         
         profile.update_protocol_distribution(protocol_str);
         
-        // Calculer le taux de paquets actuel
+        // Calculer le taux de paquets actuel pour cette IP
         if let Some(stats) = ip_stats.get(&ip) {
             let elapsed = stats.last_seen
                 .duration_since(stats.first_seen)
@@ -193,21 +200,21 @@ impl IntelligentDetector {
             // Calculer le score d'anomalie
             let anomaly_score = profile.calculate_anomaly_score(packet_rate);
             
-            // Si le score dépasse le seuil, générer un rapport
+            // Si le score dépasse le seuil, générer un rapport d'alerte
             if anomaly_score > self.anomaly_threshold {
                 self.generate_anomaly_report(ip, anomaly_score, packet_rate).await;
             }
             
-            // Retourner le score d'anomalie
-            Some(anomaly_score / 100.0) // Normaliser le score entre 0 et 1
+            // Retourner le score normalisé entre 0 et 1
+            Some(anomaly_score / 100.0)
         } else {
             None
         }
     }
     
-    /// Génère un rapport d'anomalie
+    /// Génère un rapport d'anomalie avec un niveau de sévérité adapté au score
     async fn generate_anomaly_report(&self, ip: IpAddr, score: f64, rate: f64) {
-        // Créer un message descriptif basé sur le score
+        // Créer un message descriptif adapté au niveau de criticité
         let message = if score > 90.0 {
             format!("ALERTE CRITIQUE: Comportement très suspect détecté pour l'IP {}. Score d'anomalie: {:.1}, Taux: {:.1} paquets/sec", ip, score, rate)
         } else if score > 80.0 {
@@ -220,7 +227,7 @@ impl IntelligentDetector {
         let config = self.config.read().await;
         let block_duration = config.block_duration;
         
-        // Créer le rapport
+        // Créer le rapport avec une sévérité adaptée au score
         let report = Report {
             timestamp: SystemTime::now(),
             report_type: ReportType::Alert,
@@ -231,15 +238,16 @@ impl IntelligentDetector {
             suggested_action: Some(Action::Block(ip, Duration::from_secs(block_duration))),
         };
         
-        // Envoyer le rapport
+        // Envoyer le rapport au gestionnaire central
         if let Err(e) = self.report_tx.send(report).await {
             error!("Erreur lors de l'envoi du rapport d'anomalie: {}", e);
         }
     }
     
-    /// Met à jour la baseline du trafic normal
+    /// Met à jour le profil de référence (baseline) du trafic normal
+    /// Effectué périodiquement pour s'adapter aux changements de comportement réseau
     pub async fn update_baseline(&mut self, ip_stats: &IpStatsMap) {
-        // Ne mettre à jour la baseline que toutes les heures
+        // Mise à jour limitée à une fois par heure
         let now = SystemTime::now();
         if let Ok(elapsed) = now.duration_since(self.last_baseline_update) {
             if elapsed.as_secs() < 3600 {
@@ -249,28 +257,28 @@ impl IntelligentDetector {
         
         info!("Mise à jour de la baseline du trafic normal...");
         
-        // Recalculer la baseline en utilisant les IPs qui ne sont pas bloquées
-        // et qui ont un historique suffisant
+        // Calcul de la baseline basé sur les IPs légitimes et stables
         let mut total_rate = 0.0;
         let mut count = 0;
         
         for entry in ip_stats.iter() {
             let stats = entry.value();
             
-            // Ignorer les IPs bloquées
+            // Exclure les IPs bloquées
             if stats.is_blocked {
                 continue;
             }
             
-            // Ignorer les IPs avec peu d'historique
+            // Exclure les IPs avec un historique trop court (< 5 minutes)
             let elapsed = stats.last_seen
                 .duration_since(stats.first_seen)
                 .unwrap_or(Duration::from_secs(1));
                 
-            if elapsed.as_secs() < 300 { // Au moins 5 minutes d'historique
+            if elapsed.as_secs() < 300 {
                 continue;
             }
             
+            // Calculer le taux moyen de paquets pour cette IP
             let packet_rate = if elapsed.as_secs() > 0 {
                 stats.packet_count as f64 / elapsed.as_secs() as f64
             } else {
@@ -281,6 +289,7 @@ impl IntelligentDetector {
             count += 1;
         }
         
+        // Mettre à jour la baseline si suffisamment de données
         if count > 0 {
             let avg_rate = total_rate / count as f64;
             self.baseline_profile.update_packet_rate(avg_rate);
@@ -292,29 +301,29 @@ impl IntelligentDetector {
         self.last_baseline_update = now;
     }
     
-    /// Ajuste le seuil d'anomalie en fonction des faux positifs et faux négatifs
+    /// Ajuste automatiquement le seuil d'anomalie en fonction du feedback
+    /// Permet de réduire les faux positifs et faux négatifs au fil du temps
     pub async fn adjust_threshold(&mut self, false_positives: u32, false_negatives: u32) {
         if false_positives > false_negatives && self.anomaly_threshold < 95.0 {
-            // Plus de faux positifs, augmenter le seuil
+            // Plus de faux positifs: augmenter le seuil pour plus de tolérance
             self.anomaly_threshold += 5.0;
             info!("Seuil d'anomalie augmenté à {:.1} en raison de faux positifs", 
                   self.anomaly_threshold);
         } else if false_negatives > false_positives && self.anomaly_threshold > 50.0 {
-            // Plus de faux négatifs, réduire le seuil
+            // Plus de faux négatifs: réduire le seuil pour plus de sensibilité
             self.anomaly_threshold -= 5.0;
             info!("Seuil d'anomalie réduit à {:.1} en raison de faux négatifs", 
                   self.anomaly_threshold);
         }
     }
     
-    /// Met à jour les statistiques pour une IP
+    /// Met à jour les statistiques avancées pour une IP spécifique
     pub async fn update_ip_stats(&self, _ip: IpAddr) -> Result<(), &'static str> {
-        // Pour l'exemple, cette fonction ne fait rien de particulier
-        // Dans une implémentation réelle, elle mettrait à jour des statistiques plus avancées
+        // Fonction préparée pour des extensions futures
         Ok(())
     }
     
-    /// Clone l'instance pour les besoins asynchrones
+    /// Clone l'instance pour les besoins des traitements asynchrones
     pub fn clone(&self) -> Self {
         Self {
             config: Arc::clone(&self.config),

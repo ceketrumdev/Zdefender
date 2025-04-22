@@ -1,0 +1,27 @@
+{
+  "interfaces": ["eth0"],
+  "packet_threshold": 1000,
+  "check_interval": 5,
+  "block_duration": 300,
+  "log_file": "/var/log/zdefender/zdefender.log",
+  "log_level": "info",
+  "log_mode": "File",
+  "service_state": "Stopped",
+  "fortress_mode": false,
+  "whitelist": ["127.0.0.1", "::1"],
+  "realtime_stats": false,
+  "display_realtime_stats": false,
+  "allowed_ports": [22, 80, 443],
+  "trust_threshold": 0.7,
+  "region_trust_scores": {},
+  "auto_block_threshold": 0.2,
+  "auto_whitelist_threshold": 0.9,
+  "connection_time_for_trust": 300,
+  "essential_ports": [22, 80, 443],
+  "update_config": {
+    "enabled": true,
+    "channel": "stable",
+    "check_interval": 24,
+    "last_check": null
+  }
+} 

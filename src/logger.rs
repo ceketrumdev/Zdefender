@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::models::{PacketInfo, Report, ReportType};
 use crate::log_mode::LogMode;
 use chrono::{DateTime, Local};
@@ -8,7 +9,6 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::SystemTime;
 use std::net::IpAddr;
-use serde::{Deserialize, Serialize};
 
 pub struct Logger {
     log_file: Mutex<Option<File>>,
@@ -189,6 +189,39 @@ impl Logger {
             },
             LogMode::SystemdJournal => {
                 warn!("{}", log_entry);
+            }
+        }
+    }
+
+    pub fn log_event(&self, message: &str, severity: usize, source_ip: Option<IpAddr>) {
+        let timestamp: DateTime<Local> = SystemTime::now().into();
+        let formatted_time = timestamp.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+        
+        let ip_str = match source_ip {
+            Some(ip) => ip.to_string(),
+            None => "N/A".to_string(),
+        };
+        
+        let log_entry = format!(
+            "[{}] [EVENT] [Severity: {}] [IP: {}] {}",
+            formatted_time,
+            severity,
+            ip_str,
+            message
+        );
+        
+        match self.log_mode {
+            LogMode::File => {
+                self.write_to_log(&format!("{}\n", log_entry));
+            },
+            LogMode::SystemdJournal => {
+                if severity >= 8 {
+                    error!("{}", log_entry);
+                } else if severity >= 5 {
+                    warn!("{}", log_entry);
+                } else {
+                    info!("{}", log_entry);
+                }
             }
         }
     }

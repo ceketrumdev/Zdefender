@@ -2,7 +2,7 @@
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)]()
 
 **ZDefender** est un système avancé de protection contre les attaques DDoS pour les applications Linux. Il fournit une solution complète pour détecter et atténuer les menaces réseau en temps réel.
 
@@ -27,12 +27,15 @@
 ## ✨ Fonctionnalités
 
 - **🔍 Détection multi-couches**: Analyse sophistiquée des paquets et statistiques de trafic
-- **🏰 Mode forteresse**: Protection renforcée activable instantanément en cas d'attaque massive
+- **🏰 Mode forteresse amélioré**: Protection renforcée avec whitelist automatique pour les connexions établies
 - **🚫 Blocage intelligent**: Durée de blocage adaptée selon la gravité de l'attaque
 - **⚖️ Limitation de débit**: Régulation du flux pour les comportements suspects
+- **📊 Statistiques en temps réel**: Visualisation des métriques de sécurité et connexions établies
+- **💯 Système de confiance des IPs**: Score calculé en fonction du comportement, région et historique
 - **📝 Journalisation flexible**: Support des fichiers de logs classiques et systemd-journal
 - **⚙️ Configuration facile**: Options configurables via fichier JSON
 - **🔄 Mode passif/actif**: Fonctionnement en mode détection seule ou avec mitigation active
+- **🔒 Sécurisation automatique**: Commande pour verrouiller rapidement le serveur en cas d'urgence
 
 ## 🛡️ Types d'attaques détectés
 
@@ -58,11 +61,12 @@ zdefender/
 │   ├── logger.rs       # Gestion de la journalisation
 │   ├── config.rs       # Configuration et paramètres
 │   ├── protection.rs   # Coordination des stratégies de protection
-│   ├── analyzer.rs     # Analyse du trafic
+│   ├── analyzer.rs     # Analyse du trafic et détection des attaques
 │   ├── packet_inspection.rs  # Inspection profonde des paquets
 │   ├── detect_attacks.rs     # Algorithmes de détection
-│   ├── defender.rs     # Actions de défense
-│   └── service.rs      # Gestion du service
+│   ├── defender.rs     # Actions de défense et gestion des connexions établies
+│   ├── service.rs      # Gestion du service et statistiques en temps réel
+│   └── main.rs         # Point d'entrée et CLI
 └── ...
 ```
 
@@ -92,8 +96,11 @@ sudo systemctl status zdefender
 ### Installation manuelle
 
 ```bash
-# Compiler le projet
+# Compiler le projet (sans support systemd)
 cargo build --release
+
+# Compiler avec support systemd-journal
+cargo build --release --features systemd
 
 # Copier le binaire
 sudo cp target/release/zdefender /usr/local/bin/
@@ -126,7 +133,16 @@ Le fichier de configuration se trouve à `/etc/zdefender/config.json` :
   "log_mode": "File",
   "service_state": "Active",
   "fortress_mode": false,
-  "whitelist": ["127.0.0.1", "::1"]
+  "whitelist": ["127.0.0.1", "::1"],
+  "realtime_stats": false,
+  "display_realtime_stats": false,
+  "allowed_ports": [22, 80, 443],
+  "trust_threshold": 0.7,
+  "region_trust_scores": {},
+  "auto_block_threshold": 0.2,
+  "auto_whitelist_threshold": 0.9,
+  "connection_time_for_trust": 300,
+  "essential_ports": [22, 80, 443]
 }
 ```
 
@@ -141,6 +157,12 @@ Le fichier de configuration se trouve à `/etc/zdefender/config.json` :
 | `log_mode` | Mode de journalisation (`File` ou `SystemdJournal`) | `File` |
 | `fortress_mode` | Mode forteresse activé | `false` |
 | `whitelist` | IPs à ne jamais bloquer | `["127.0.0.1", "::1"]` |
+| `allowed_ports` | Ports autorisés lors de la sécurisation | `[22, 80, 443]` |
+| `trust_threshold` | Seuil de confiance pour considérer une IP fiable | `0.7` |
+| `region_trust_scores` | Scores de confiance par région | `{}` |
+| `auto_block_threshold` | Seuil de confiance pour blocage automatique | `0.2` |
+| `auto_whitelist_threshold` | Seuil de confiance pour mise en liste blanche auto | `0.9` |
+| `connection_time_for_trust` | Durée de connexion (sec) pour être fiable | `300` |
 
 ## 📝 Journalisation
 
@@ -176,8 +198,17 @@ zdefender stop
 # Afficher le statut
 zdefender status
 
-# Afficher les statistiques détaillées
+# Afficher les statistiques en temps réel (Ctrl+C pour quitter)
 zdefender stats
+
+# Afficher un rapport statique des statistiques de base
+zdefender check
+
+# Afficher les statistiques détaillées avec scores de confiance
+zdefender detailed-stats
+
+# Consulter les informations sur une IP spécifique
+zdefender ip-info 192.168.1.10
 
 # Activer le mode forteresse
 zdefender fortress --enable
@@ -185,8 +216,36 @@ zdefender fortress --enable
 # Désactiver le mode forteresse
 zdefender fortress --disable
 
+# Sécuriser rapidement le serveur
+zdefender secure
+
+# Sécuriser le serveur en spécifiant les ports à laisser ouverts
+zdefender secure --ports=22,80,443,3306
+
+# Configurer le score de confiance pour une région
+zdefender configure-region FR 0.8
+
 # Recharger la configuration
 zdefender reload
+
+# Afficher les logs
+zdefender logs
+
+# Afficher les N dernières lignes de logs
+zdefender logs --lines=50
+
+# Afficher uniquement les logs d'erreur
+zdefender logs --level=error
+
+# Combiner les options
+zdefender logs --lines=30 --level=warn
+
+# Configurer les paramètres de mise à jour
+zdefender update-settings --enable          # Activer les mises à jour automatiques
+zdefender update-settings --disable         # Désactiver les mises à jour automatiques
+zdefender update-settings --channel=beta    # Configurer le canal des mises à jour (stable, beta, dev)
+zdefender update-settings --interval=48     # Configurer l'intervalle de vérification (en heures)
+zdefender update-settings --check-now       # Forcer une vérification immédiate des mises à jour
 ```
 
 ### Bibliothèque
@@ -212,6 +271,9 @@ async fn main() {
     // Configurer les seuils de détection
     protection.set_thresholds(100.0, 0.8);
 
+    // Définir un score de confiance régional
+    protection.set_region_trust("FR", 0.8).await;
+
     // Traiter un paquet
     if let Some(action) = protection.process_packet(packet) {
         match action {
@@ -221,21 +283,31 @@ async fn main() {
             _ => {}
         }
     }
+    
+    // Activer le mode forteresse
+    protection.enable_fortress_mode().await;
+    
+    // Consulter les statistiques de sécurité
+    let stats = protection.get_security_stats().await;
+    println!("Score de sécurité: {}", stats.average_security_score);
 }
 ```
 
-## 📊 Comparer avec d'autres solutions
+## 🔄 Comparer avec d'autres solutions
 
-| Fonctionnalité | ZDefender | Fail2Ban | Cloudflare | NFTables |
-|----------------|-----------|----------|------------|---------|
-| Détection temps réel | ✅ | ⚠️ (basé sur logs) | ✅ | ❌ |
-| Mode forteresse | ✅ | ❌ | ✅ | ⚠️ (manuel) |
-| Limitation de débit | ✅ | ❌ | ✅ | ✅ |
-| Inspection de paquets | ✅ | ❌ | ✅ | ❌ |
-| Auto-adaptation | ✅ | ❌ | ✅ | ❌ |
-| Open Source | ✅ | ✅ | ❌ | ✅ |
-| Facilité d'installation | ✅ | ✅ | ❌ (service externe) | ✅ |
+| Fonctionnalité | ZDefender | Fail2Ban | Crowdsec |
+|----------------|-----------|----------|----------|
+| Détection en temps réel | ✅ | ❌ | ✅ |
+| Analyse comportementale | ✅ | ❌ | ✅ |
+| Sécurisation automatique | ✅ | ✅ | ✅ |
+| Mode forteresse | ✅ | ❌ | ❌ |
+| Statistiques en temps réel | ✅ | ❌ | ✅ |
+| Système de confiance | ✅ | ❌ | ✅ |
+| Écrit en Rust | ✅ | ❌ | ❌ |
+| Peut être utilisé comme lib | ✅ | ❌ | ✅ |
+| Analyses personnalisées | ✅ | ✅ | ✅ |
+| Protection DDoS | ✅ | ❌ | ✅ |
 
-## 📄 Licence
+## 📜 Licence
 
-Ce projet est sous licence [MIT](LICENSE). Voir le fichier LICENSE pour plus de détails. 
+Ce projet est sous licence MIT - voir le fichier LICENSE pour plus de détails. 
