@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::config::Config;
 use crate::models::{
-    GlobalStats, IpStats, IpStatsMap, PacketInfo, Report
+    GlobalStats, IpStats, IpStatsMap, Report
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -86,7 +86,7 @@ impl Analyzer {
         }
     }
 
-    pub async fn analyze_packet(&self, packet: PacketInfo) {
+    pub async fn analyze_packet(&self) {
         // Version minimale pour compiler
     }
 

@@ -139,7 +139,7 @@ impl ZdefenderService {
                 
                 let task = tokio::spawn(async move {
                     while let Ok(packet) = packet_rx.recv().await {
-                        analyzer_clone.analyze_packet(packet).await;
+                        analyzer_clone.analyze_packet().await;
                     }
                 });
                 
@@ -150,7 +150,7 @@ impl ZdefenderService {
             let analyzer_clone = analyzer.clone();
             let task = tokio::spawn(async move {
                 while let Some(packet) = packet_rx.recv().await {
-                    analyzer_clone.analyze_packet(packet).await;
+                    analyzer_clone.analyze_packet().await;
                 }
             });
             packet_tasks.push(task);

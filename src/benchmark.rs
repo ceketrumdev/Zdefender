@@ -291,7 +291,7 @@ impl ZDefenderBenchmark {
         let start = Instant::now();
         
         // Analyser le paquet avec l'analyseur
-        self.analyzer.analyze_packet(packet.clone()).await;
+        self.analyzer.analyze_packet().await;
         
         // Vérifier si le paquet doit être bloqué
         let mut action = None;
