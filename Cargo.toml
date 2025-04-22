@@ -20,8 +20,7 @@ chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 dashmap = "6.1.0"
-rand = "0.8.5"
-crossbeam-channel = "0.5"
+rand = "0.9.1"
 futures = "0.3"
 # Dépendance conditionnelle pour systemd-journal-logger
 systemd-journal-logger = { version = "2.0.0", optional = true }
@@ -29,4 +28,3 @@ anyhow = "1.0.98"
 num_cpus = "1.16.0"
 num-format = "0.4.4"
 async-trait = "0.1.77"
-reqwest = { version = "0.12.15", features = ["json"] }
