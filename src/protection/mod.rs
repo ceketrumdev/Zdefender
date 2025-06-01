@@ -7,6 +7,7 @@ mod detection;
 mod blocked_ips;
 mod packet_analyzer;
 mod fortress;
+pub mod suspend;
 
 use crate::config::Config;
 use crate::intelligent_detection::IntelligentDetector;

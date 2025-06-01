@@ -9,6 +9,7 @@ mod intelligent_detection;
 mod packet_inspection;
 mod protection;
 mod log_mode;
+mod api;
 
 use clap::Parser;
 use cli::{Cli, Mode};
@@ -23,7 +24,9 @@ use crate::models::{PacketInfo, Report, ReportType, Action, PacketType};
 use tokio::sync::{mpsc};
 use tokio::time;
 use crate::cli::Command;
-use anyhow::Result;
+use anyhow::{Result, Context};
+use axum::serve;
+use std::net::SocketAddr;
 // Ne pas utiliser d'instruction `use` en dehors du bloc cfg
 // #[cfg(feature = "systemd")]
 // use systemd_journal_logger;
@@ -85,6 +88,25 @@ async fn main() -> Result<()> {
         }
     }
     
+    // Créer une instance de IpSuspender
+    let suspender = Arc::new(protection::suspend::IpSuspender::new());
+
+    // Créer le routeur API
+    let app = api::create_router(suspender);
+
+    // Démarrer le serveur API dans un thread séparé
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    println!("Serveur API démarré sur http://{}", addr);
+    
+    tokio::spawn(async move {
+        if let Err(e) = serve(
+            tokio::net::TcpListener::bind(addr).await.unwrap(),
+            app.into_make_service()
+        ).await {
+            error!("Erreur du serveur API: {}", e);
+        }
+    });
+
     // Analyser les arguments de ligne de commande
     let cli = Cli::parse();
     
@@ -255,6 +277,38 @@ async fn main() -> Result<()> {
                 Err(e) => {
                     error!("Erreur lors de la sécurisation du serveur: {}", e);
                     Err(anyhow::anyhow!("Erreur lors de la sécurisation du serveur: {}", e))
+                }
+            }
+        },
+        Command::Suspend { ip, interface } => {
+            let ip_addr = ip.parse::<std::net::IpAddr>()
+                .context("Adresse IP invalide")?;
+            
+            let suspender = protection::suspend::IpSuspender::new();
+            match suspender.suspend_ip(ip_addr, interface).await {
+                Ok(_) => {
+                    println!("IP {} suspendue avec succès", ip);
+                    Ok(())
+                },
+                Err(e) => {
+                    error!("Erreur lors de la suspension de l'IP {}: {}", ip, e);
+                    Err(anyhow::anyhow!("Erreur lors de la suspension de l'IP: {}", e))
+                }
+            }
+        },
+        Command::Unsuspend { ip } => {
+            let ip_addr = ip.parse::<std::net::IpAddr>()
+                .context("Adresse IP invalide")?;
+            
+            let suspender = protection::suspend::IpSuspender::new();
+            match suspender.unsuspend_ip(&ip_addr).await {
+                Ok(_) => {
+                    println!("IP {} désuspendue avec succès", ip);
+                    Ok(())
+                },
+                Err(e) => {
+                    error!("Erreur lors de la désuspension de l'IP {}: {}", ip, e);
+                    Err(anyhow::anyhow!("Erreur lors de la désuspension de l'IP: {}", e))
                 }
             }
         },
@@ -487,9 +541,11 @@ async fn main() -> Result<()> {
             
             Ok(())
         },
+        _ => {
+            println!("Commande non implémentée");
+            Ok(())
+        }
     }
-    
-    // Retour implicite de Ok(())
 }
 
 /// Traite un rapport reçu

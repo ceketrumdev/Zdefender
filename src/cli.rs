@@ -170,6 +170,24 @@ pub enum Command {
         #[arg(long)]
         check_now: bool,
     },
+
+    /// Suspend une adresse IP spécifique
+    Suspend {
+        /// Adresse IP à suspendre
+        #[arg(required = true)]
+        ip: String,
+        
+        /// Interface réseau à utiliser pour le blocage
+        #[arg(short, long)]
+        interface: Option<String>,
+    },
+
+    /// Désuspend une adresse IP spécifique
+    Unsuspend {
+        /// Adresse IP à désuspendre
+        #[arg(required = true)]
+        ip: String,
+    },
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
