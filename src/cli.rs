@@ -1,209 +1,132 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use std::io::{self, Write, BufRead};
+use std::path::Path;
+use crate::core::audit::{AuditSystem, LogLevel};
+use crate::core::benchmark::BenchmarkSystem;
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-pub struct Cli {
-    #[command(subcommand)]
-    pub command: Command,
-
-    /// Change le mode de fonctionnement de ZDefender
-    #[arg(short, long)]
-    pub mode: Option<Mode>,
+pub struct CLI {
+    audit_system: AuditSystem,
+    benchmark_system: BenchmarkSystem,
+    running: bool,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum Mode {
-    /// Mode d'analyse uniquement, sans action de protection
-    Passive,
-    /// Mode de protection actif avec blocage automatique
-    Active,
+impl CLI {
+    pub fn new(log_path: &Path, audit_path: &Path) -> Result<Self, std::io::Error> {
+        Ok(Self {
+            audit_system: AuditSystem::new(log_path, audit_path)?,
+            benchmark_system: BenchmarkSystem::new(),
+            running: true,
+        })
+    }
+
+    pub fn run(&mut self) {
+        println!("ZDefender 2.0 CLI - Tapez 'help' pour la liste des commandes");
+        
+        let stdin = io::stdin();
+        let mut stdout = io::stdout();
+
+        while self.running {
+            print!("zdefender> ");
+            stdout.flush().unwrap();
+
+            let mut input = String::new();
+            if stdin.lock().read_line(&mut input).is_err() {
+                continue;
+            }
+
+            let command = input.trim();
+            self.process_command(command);
+        }
+    }
+
+    fn process_command(&mut self, command: &str) {
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        if parts.is_empty() {
+            return;
+        }
+
+        match parts[0] {
+            "help" => self.show_help(),
+            "status" => self.show_status(),
+            "logs" => self.show_logs(parts.get(1).map(|&n| n.parse().unwrap_or(10))),
+            "benchmark" => self.run_benchmark(parts.get(1)),
+            "clear" => self.clear_logs(),
+            "exit" => self.running = false,
+            _ => println!("Commande non reconnue. Tapez 'help' pour la liste des commandes."),
+        }
+    }
+
+    fn show_help(&self) {
+        println!("\nCommandes disponibles:");
+        println!("  help     - Affiche cette aide");
+        println!("  status   - Affiche le statut du système");
+        println!("  logs [n] - Affiche les n derniers logs (défaut: 10)");
+        println!("  benchmark [nom] - Lance un benchmark");
+        println!("  clear    - Efface les logs");
+        println!("  exit     - Quitte l'application\n");
+    }
+
+    fn show_status(&self) {
+        let metrics = self.audit_system.get_metrics();
+        println!("\nStatut du système:");
+        println!("  Requêtes totales: {}", metrics.total_requests);
+        println!("  Requêtes bloquées: {}", metrics.blocked_requests);
+        println!("  Attaques DDoS: {}", metrics.ddos_attacks);
+        println!("  Utilisation mémoire: {:.1}%", metrics.memory_usage);
+        println!("  Utilisation CPU: {:.1}%\n");
+    }
+
+    fn show_logs(&self, count: Option<usize>) {
+        let count = count.unwrap_or(10);
+        let logs = self.audit_system.get_recent_logs(count);
+        
+        println!("\nDerniers logs:");
+        for log in logs {
+            println!(
+                "[{}] [{}] [{}] {} {}",
+                log.timestamp,
+                format!("{:?}", log.level),
+                log.module,
+                log.message,
+                log.metadata.unwrap_or_default()
+            );
+        }
+        println!();
+    }
+
+    fn run_benchmark(&self, name: Option<&str>) {
+        let name = name.unwrap_or("default");
+        self.benchmark_system.start_benchmark(name);
+        
+        // Simuler une opération
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        
+        if let Some(result) = self.benchmark_system.end_benchmark(1000) {
+            println!("\nRésultats du benchmark '{}':", name);
+            println!("  Durée: {:?}", result.duration);
+            println!("  Opérations/seconde: {:.2}", result.operations_per_second);
+            println!("  Utilisation mémoire: {} bytes", result.memory_usage);
+            println!("  Utilisation CPU: {:.1}%\n", result.cpu_usage);
+        }
+    }
+
+    fn clear_logs(&self) {
+        self.audit_system.clear_logs();
+        println!("Logs effacés.\n");
+    }
 }
 
-#[derive(Subcommand)]
-pub enum Command {
-    /// Démarre le service ZDefender
-    Start {
-        /// Exécute en arrière-plan (daemon)
-        #[arg(short, long)]
-        daemon: bool,
-    },
-    
-    /// Arrête le service ZDefender
-    Stop,
-    
-    /// Affiche le statut actuel du service
-    Status,
-    
-    /// Configure le mode forteresse
-    Fortress {
-        /// Active le mode forteresse
-        #[arg(short, long)]
-        enable: bool,
-        
-        /// Désactive le mode forteresse (prioritaire sur --enable)
-        #[arg(long)]
-        disable: bool,
-    },
-    
-    /// Affiche les statistiques en temps réel (Ctrl+C pour quitter)
-    Stats,
-    
-    /// Affiche un rapport statique des statistiques basiques
-    Check,
-    
-    /// Affiche des statistiques détaillées avec scores de confiance
-    DetailedStats,
-    
-    /// Active ou désactive les statistiques en temps réel (obsolète, utilisez Stats)
-    Realtime {
-        /// Mode à définir (on ou off)
-        #[arg(default_value = "on")]
-        mode: RealtimeMode,
-    },
-    
-    /// Sécurise rapidement le serveur en bloquant tous les ports non essentiels
-    Secure {
-        /// Liste des ports qui doivent rester ouverts (séparés par des virgules)
-        #[arg(short, long)]
-        ports: Option<String>,
-    },
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
 
-    /// Recharge la configuration
-    Reload,
-    
-    /// Configure les scores de confiance régionaux
-    ConfigureRegion {
-        /// Code de région à configurer (ex: US, EU, CN, etc.)
-        region: String,
-        
-        /// Score de confiance à attribuer (entre 0.0 et 1.0)
-        #[arg(default_value = "0.5")]
-        score: f64,
-    },
-    
-    /// Consulte les informations sur une IP spécifique
-    IpInfo {
-        /// Adresse IP à vérifier
-        ip: String,
-    },
+    #[test]
+    fn test_cli_creation() {
+        let dir = tempdir().unwrap();
+        let log_path = dir.path().join("test.log");
+        let audit_path = dir.path().join("test.audit");
 
-    /// Affiche les logs du système en temps réel
-    Logs {
-        /// Nombre de lignes à afficher (si non précisé, affiche les logs en continu)
-        #[arg(short, long)]
-        lines: Option<usize>,
-        
-        /// Filtre par niveau de log (error, warn, info, debug, trace)
-        #[arg(short, long)]
-        level: Option<String>,
-    },
-    
-    /// Lance un benchmark du système anti-DDoS
-    Benchmark {
-        /// Nombre de paquets à traiter (défaut: 10000)
-        #[arg(short, long, default_value = "10000")]
-        packets: u64,
-        
-        /// Ratio de trafic normal vs trafic d'attaque (défaut: 0.8)
-        #[arg(short, long, default_value = "0.8")]
-        normal_ratio: f64,
-        
-        /// Fichier de sortie pour les résultats CSV
-        #[arg(short, long)]
-        output: Option<String>,
-    },
-    
-    /// Configure la protection contre les attaques DDoS distribuées
-    DDoSProtection {
-        /// Active la détection automatique des attaques DDoS distribuées
-        #[arg(short, long)]
-        enable: bool,
-        
-        /// Désactive la détection automatique des attaques DDoS distribuées
-        #[arg(long)]
-        disable: bool,
-        
-        /// Configure le seuil de ratio paquets/IPs (valeur par défaut: 50.0)
-        #[arg(long)]
-        ratio: Option<f64>,
-        
-        /// Configure le nombre minimum d'IPs distinctes pour considérer une attaque DDoS (valeur par défaut: 50)
-        #[arg(long)]
-        min_ips: Option<u32>,
-        
-        /// Configure le seuil de paquets par seconde pour déclencher une alerte (valeur par défaut: 5000)
-        #[arg(long)]
-        packets_per_second: Option<u64>,
-        
-        /// Configure la durée de protection après détection (en secondes, valeur par défaut: 300)
-        #[arg(long)]
-        duration: Option<u64>,
-        
-        /// Active l'activation automatique du mode forteresse en cas d'attaque
-        #[arg(long)]
-        auto_fortress: bool,
-        
-        /// Désactive l'activation automatique du mode forteresse
-        #[arg(long)]
-        no_auto_fortress: bool,
-    },
-    
-    /// Configure les paramètres de mise à jour
-    UpdateSettings {
-        /// Active les mises à jour automatiques
-        #[arg(short, long)]
-        enable: bool,
-        
-        /// Désactive les mises à jour automatiques
-        #[arg(long)]
-        disable: bool,
-        
-        /// Configure le canal de mise à jour
-        #[arg(long)]
-        channel: Option<UpdateChannel>,
-        
-        /// Configure l'intervalle de vérification des mises à jour (en heures)
-        #[arg(long)]
-        interval: Option<u64>,
-        
-        /// Force une vérification immédiate des mises à jour
-        #[arg(long)]
-        check_now: bool,
-    },
-
-    /// Suspend une adresse IP spécifique
-    Suspend {
-        /// Adresse IP à suspendre
-        #[arg(required = true)]
-        ip: String,
-        
-        /// Interface réseau à utiliser pour le blocage
-        #[arg(short, long)]
-        interface: Option<String>,
-    },
-
-    /// Désuspend une adresse IP spécifique
-    Unsuspend {
-        /// Adresse IP à désuspendre
-        #[arg(required = true)]
-        ip: String,
-    },
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum RealtimeMode {
-    /// Active les statistiques en temps réel
-    On,
-    /// Désactive les statistiques en temps réel
-    Off,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-pub enum UpdateChannel {
-    /// Canal stable (versions stables uniquement)
-    Stable,
-    /// Canal beta (versions bêta et stables)
-    Beta,
-    /// Canal de développement (versions expérimentales)
-    Dev,
+        let cli = CLI::new(&log_path, &audit_path);
+        assert!(cli.is_ok());
+    }
 } 
